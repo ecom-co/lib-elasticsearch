@@ -9,7 +9,7 @@ export type ElasticsearchClientOptions = ClientOptions & { name?: string };
 export interface ElasticsearchModuleOptions {
     clients: ElasticsearchClientOptions[];
     /** Optional list of entity classes (decorated with @Document) for auto index creation */
-    documents?: Array<new () => Record<string, unknown>>;
+    documents?: Array<abstract new (...args: any[]) => object>;
     /** When true, auto-create indices for provided documents on module init (idempotent) */
     autoCreateIndices?: boolean;
 }
