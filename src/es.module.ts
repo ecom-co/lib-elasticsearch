@@ -2,6 +2,7 @@ import { DynamicModule, Global, Module, OnModuleInit, Provider } from '@nestjs/c
 
 import { ES_DEFAULT_CLIENT_NAME, ES_MODULE_OPTIONS, getElasticsearchClientToken } from './es.constants';
 import type { ElasticsearchClient, ElasticsearchModuleAsyncOptions, ElasticsearchModuleOptions } from './es.interfaces';
+import { createElasticsearchProviders } from './es.providers';
 import { ElasticsearchService } from './es.service';
 import { buildDocumentMetadata, normalizeName } from './es.utils';
 
@@ -45,6 +46,17 @@ class EsIndexInitializer implements OnModuleInit {
 @Global()
 @Module({})
 export class ElasticsearchModule {
+    static forFeature(
+        entities: Array<abstract new (...args: any[]) => object> = [],
+        clientName?: string,
+    ): DynamicModule {
+        const providers = createElasticsearchProviders(entities, clientName);
+        return {
+            module: ElasticsearchModule,
+            providers: providers,
+            exports: providers,
+        };
+    }
     static forRoot(options: ElasticsearchModuleOptions): DynamicModule {
         const optionProvider: Provider = { provide: ES_MODULE_OPTIONS, useValue: options };
         const serviceProvider: Provider = {

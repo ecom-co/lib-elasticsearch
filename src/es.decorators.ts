@@ -8,6 +8,7 @@ import {
     ES_INDEX_METADATA,
 } from './es.constants';
 import type { DocumentOptions, FieldOptions, IndexOptions } from './es.interfaces';
+import { getRepositoryToken } from './es.repository';
 
 export type InjectElasticsearch = {
     (): ParameterDecorator;
@@ -16,6 +17,16 @@ export type InjectElasticsearch = {
 
 export const InjectElasticsearch: InjectElasticsearch = ((name?: string): ParameterDecorator =>
     Inject(getElasticsearchClientToken(name))) as InjectElasticsearch;
+
+export type InjectEsRepository = {
+    <T>(entity: new () => T): ParameterDecorator;
+    <T, TName extends string = 'default'>(entity: new () => T, name: TName): ParameterDecorator;
+};
+
+export const InjectEsRepository: InjectEsRepository = (<T>(
+    entity: new () => T,
+    clientName?: string,
+): ParameterDecorator => Inject(getRepositoryToken(entity, clientName))) as InjectEsRepository;
 
 /**
  * Decorator to mark a class as an Elasticsearch document

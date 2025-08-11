@@ -6,8 +6,7 @@ import { getElasticsearchClientToken } from './es.constants';
 import type { ElasticsearchClient } from './es.interfaces';
 import { buildDocumentMetadata, getDocumentMetadata, toElasticsearchDocument } from './es.utils';
 
-export type Constructor<T> = new () => T;
-
+export type Constructor<T = any, Arguments extends unknown[] = any[]> = new (...arguments_: Arguments) => T;
 /**
  * Base Elasticsearch repository providing CRUD, bulk, query, and search helpers
  * for an entity `T` described via `@Document`/`@Field` decorators.
