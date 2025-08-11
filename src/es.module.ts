@@ -1,9 +1,9 @@
-import { DynamicModule, Global, Module, Provider } from '@nestjs/common';
+import { DynamicModule, Global, Module, OnModuleInit, Provider } from '@nestjs/common';
 
 import { ES_DEFAULT_CLIENT_NAME, ES_MODULE_OPTIONS, getElasticsearchClientToken } from './es.constants';
 import type { ElasticsearchClient, ElasticsearchModuleAsyncOptions, ElasticsearchModuleOptions } from './es.interfaces';
 import { ElasticsearchService } from './es.service';
-import { normalizeName } from './es.utils';
+import { buildDocumentMetadata, normalizeName } from './es.utils';
 
 const createClientProviders = (options: ElasticsearchModuleOptions): Provider[] =>
     options.clients.map((clientOptions) => {
@@ -15,6 +15,32 @@ const createClientProviders = (options: ElasticsearchModuleOptions): Provider[] 
             inject: [ElasticsearchService],
         } satisfies Provider;
     });
+
+class EsIndexInitializer implements OnModuleInit {
+    constructor(
+        private readonly service: ElasticsearchService,
+        private readonly options: ElasticsearchModuleOptions,
+    ) {}
+
+    async onModuleInit(): Promise<void> {
+        if (!this.options.autoCreateIndices) return;
+        const documents = this.options.documents ?? [];
+        if (documents.length === 0) return;
+        const client = this.service.get();
+        const creations: Array<Promise<unknown>> = [];
+        for (const doc of documents) {
+            const meta = buildDocumentMetadata(doc);
+            if (!meta) continue;
+            creations.push(
+                client.indices.create(
+                    { index: meta.index, settings: meta.settings, mappings: meta.mappings },
+                    { ignore: [400] },
+                ),
+            );
+        }
+        await Promise.allSettled(creations);
+    }
+}
 
 @Global()
 @Module({})
@@ -30,6 +56,12 @@ export class ElasticsearchModule {
             },
             inject: [ES_MODULE_OPTIONS],
         };
+        const indexInitializerProvider: Provider = {
+            provide: EsIndexInitializer,
+            useFactory: (service: ElasticsearchService, opts: ElasticsearchModuleOptions) =>
+                new EsIndexInitializer(service, opts),
+            inject: [ElasticsearchService, ES_MODULE_OPTIONS],
+        };
         const clientProviders = createClientProviders(options);
         const defaultProvider: Provider = {
             provide: getElasticsearchClientToken(ES_DEFAULT_CLIENT_NAME),
@@ -38,7 +70,7 @@ export class ElasticsearchModule {
         };
         return {
             module: ElasticsearchModule,
-            providers: [optionProvider, serviceProvider, defaultProvider, ...clientProviders],
+            providers: [optionProvider, serviceProvider, indexInitializerProvider, defaultProvider, ...clientProviders],
             exports: [
                 ElasticsearchService,
                 getElasticsearchClientToken(ES_DEFAULT_CLIENT_NAME),
@@ -62,6 +94,12 @@ export class ElasticsearchModule {
             },
             inject: [ES_MODULE_OPTIONS],
         };
+        const indexInitializerProvider: Provider = {
+            provide: EsIndexInitializer,
+            useFactory: (service: ElasticsearchService, opts: ElasticsearchModuleOptions) =>
+                new EsIndexInitializer(service, opts),
+            inject: [ElasticsearchService, ES_MODULE_OPTIONS],
+        };
 
         const predeclaredProviders: Provider[] = (options.predeclare ?? []).map((rawName): Provider => {
             const name = normalizeName(rawName);
@@ -84,7 +122,7 @@ export class ElasticsearchModule {
         return {
             module: ElasticsearchModule,
             imports: options.imports || [],
-            providers: [asyncOptionsProvider, serviceProvider, ...proxyProviders],
+            providers: [asyncOptionsProvider, serviceProvider, indexInitializerProvider, ...proxyProviders],
             exports: (() => {
                 const predeclaredTokens = (options.predeclare ?? []).map((n) =>
                     getElasticsearchClientToken(normalizeName(n)),
