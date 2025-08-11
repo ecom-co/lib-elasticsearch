@@ -238,32 +238,51 @@ export class EsRepository<T extends object> {
     }
 
     /** Search and return the full typed response. */
-    async search(params: Omit<Parameters<ElasticsearchClient['search']>[0], 'index'>): Promise<SearchResponse<T>> {
-        const request = { index: this.index, ...params } as Omit<
-            Parameters<ElasticsearchClient['search']>[0],
-            'index'
-        > & { index: string };
+    async search(params: {
+        query?: QueryDslQueryContainer;
+        q?: string;
+        from?: number;
+        size?: number;
+        sort?: unknown;
+    }): Promise<SearchResponse<T>> {
+        const request = { index: this.index, ...params } as Parameters<ElasticsearchClient['search']>[0];
         return this.es.search<T>(request);
     }
 
     /** Search and return the `_source` array. */
-    async searchSources(params: Omit<Parameters<ElasticsearchClient['search']>[0], 'index'>): Promise<T[]> {
+    async searchSources(params: {
+        query?: QueryDslQueryContainer;
+        q?: string;
+        from?: number;
+        size?: number;
+        sort?: unknown;
+    }): Promise<T[]> {
         const res = await this.search(params);
         const hits = res.hits?.hits ?? [];
         return hits.map((h) => h._source).filter((s): s is T => s != null);
     }
 
     /** Search and return only document ids. */
-    async searchIds(params: Omit<Parameters<ElasticsearchClient['search']>[0], 'index'>): Promise<string[]> {
+    async searchIds(params: {
+        query?: QueryDslQueryContainer;
+        q?: string;
+        from?: number;
+        size?: number;
+        sort?: unknown;
+    }): Promise<string[]> {
         const res = await this.search(params);
         const hits = res.hits?.hits ?? [];
         return hits.map((h) => String(h._id)).filter((id) => !!id);
     }
 
     /** Search and return the first hit `_source`, if any. */
-    async searchFirstSource(
-        params: Omit<Parameters<ElasticsearchClient['search']>[0], 'index'>,
-    ): Promise<T | undefined> {
+    async searchFirstSource(params: {
+        query?: QueryDslQueryContainer;
+        q?: string;
+        from?: number;
+        size?: number;
+        sort?: unknown;
+    }): Promise<T | undefined> {
         const res = await this.search({ ...params, size: 1 });
         const hit = res.hits?.hits?.[0];
         return hit?._source ?? undefined;
