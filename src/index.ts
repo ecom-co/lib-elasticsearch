@@ -5,6 +5,7 @@ export * from './es.module';
 export * from './es.service';
 export * from './es.utils';
 export * from './terminus/es.health';
+export * from './es.repository';
 
 // Re-export specific decorators for convenience
 export { Document, Field, Index } from './es.decorators';

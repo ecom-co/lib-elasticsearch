@@ -224,4 +224,75 @@ await repo.updateByQueryScript({
 });
 ```
 
+### Examples: Insert documents (single, bulk, nested)
+
+Using raw client:
+
+```ts
+import { InjectElasticsearch, ElasticsearchClient } from '@ecom-co/elasticsearch';
+
+class ProductDoc {
+  id!: string;
+  name!: string;
+  price!: number;
+  tags?: Array<{ id: string; name: string }>;
+}
+
+export class ProductWriter {
+  private readonly index = 'products';
+  constructor(@InjectElasticsearch() private readonly es: ElasticsearchClient) {}
+
+  async insertOne(doc: ProductDoc) {
+    await this.es.index({ index: this.index, id: doc.id, document: doc });
+    await this.es.indices.refresh({ index: this.index });
+  }
+
+  async bulkInsert(docs: ProductDoc[]) {
+    if (!docs.length) return;
+    const operations: Array<Record<string, unknown>> = [];
+    for (const d of docs) {
+      operations.push({ index: { _index: this.index, _id: d.id } });
+      operations.push(d);
+    }
+    await this.es.bulk({ operations });
+    await this.es.indices.refresh({ index: this.index });
+  }
+}
+```
+
+Using repository:
+
+```ts
+import { EsRepository, InjectElasticsearch, ElasticsearchClient } from '@ecom-co/elasticsearch';
+
+@Document({ index: 'products' })
+class Product {
+  @Field({ type: 'keyword' }) id!: string;
+  @Field({ type: 'text', analyzer: 'standard' }) name!: string;
+  @Field({ type: 'double' }) price!: number;
+  @Field({
+    type: 'nested',
+    properties: {
+      id: { type: 'keyword' },
+      name: { type: 'text', fields: { keyword: { type: 'keyword' } } },
+    },
+  })
+  tags?: Array<{ id: string; name: string }>;
+}
+
+class ProductRepository extends EsRepository<Product> {
+  constructor(@InjectElasticsearch() es: ElasticsearchClient) {
+    super(es, Product);
+  }
+}
+
+// Usage
+await repo.ensureIndex();
+await repo.indexOne({ id: 'p1', name: 'iPhone 15', price: 999, tags: [{ id: 'apple', name: 'Apple' }] });
+await repo.bulkIndex([
+  { id: 'p2', name: 'iPad', price: 499 },
+  { id: 'p3', name: 'Apple Watch', price: 399 },
+]);
+```
+
 
