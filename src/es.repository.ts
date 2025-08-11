@@ -13,7 +13,7 @@ export type Constructor<T> = new () => T;
  * for an entity `T` described via `@Document`/`@Field` decorators.
  */
 @Injectable()
-export class EsRepository<T extends Record<string, unknown>> {
+export class EsRepository<T extends object> {
     /**
      * Create a repository for the given entity constructor using the provided client.
      * @param es Elasticsearch client instance

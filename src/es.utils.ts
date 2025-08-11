@@ -73,19 +73,20 @@ export const buildDocumentMetadata = (target: object): DocumentMetadata | undefi
 /**
  * Convert a class instance to Elasticsearch document format
  */
-export const toElasticsearchDocument = (instance: Record<string, unknown>): Record<string, unknown> => {
+export const toElasticsearchDocument = (instance: object): Record<string, unknown> => {
     const fieldsMetadata = getFieldsMetadata(instance.constructor);
     const document: Record<string, unknown> = {};
 
     if (!fieldsMetadata) {
         // If no field metadata, return all enumerable properties
-        return { ...instance };
+        return { ...(instance as Record<string, unknown>) };
     }
 
     // Only include fields that are decorated with @Field
+    const record = instance as unknown as Record<string, unknown>;
     fieldsMetadata.forEach((fieldOptions, fieldName) => {
         const key = String(fieldName);
-        const value = instance[key];
+        const value = record[key];
         if (value !== undefined) {
             document[key] = value;
         }
