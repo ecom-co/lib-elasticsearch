@@ -40,7 +40,10 @@ import { ElasticsearchModule } from '@ecom-co/elasticsearch';
 @Module({
   imports: [
     ElasticsearchModule.forRoot({
-      clients: [{ name: 'default', node: 'http://localhost:9200' }],
+      clients: [
+        { name: 'default', node: 'http://localhost:9200' },
+        { name: 'analytics', node: 'http://localhost:9200' },
+      ],
       autoCreateIndices: true,
       documents: [Product],
     }),
@@ -59,7 +62,10 @@ import { ProductsService } from './products.service';
 import { Product } from './product.doc';
 
 @Module({
-  imports: [ElasticsearchModule.forFeature([Product])],
+  imports: [
+    ElasticsearchModule.forFeature([Product]),
+    ElasticsearchModule.forFeature([Product], 'analytics'),
+  ],
   providers: [ProductsService],
 })
 export class ProductsModule {}
@@ -78,13 +84,17 @@ export class ProductsService {
   constructor(
     @InjectEsRepository(Product)
     private readonly repo: EsRepository<Product>,
+    @InjectEsRepository(Product, 'analytics')
+    private readonly analyticsRepo: EsRepository<Product>,
   ) {}
 
   async search(q: string) {
-    return this.repo.search({
+    const primary = await this.repo.search({
       query: { multi_match: { query: q, fields: ['name^2', 'id'] } },
       size: 20,
     });
+    const secondary = await this.analyticsRepo.search({ q, size: 10 });
+    return { primary, secondary };
   }
 
   // Access raw client when you need full power of the official API
