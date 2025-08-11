@@ -1,6 +1,11 @@
 # @ecom-co/elasticsearch
 
-NestJS Elasticsearch module built on `@elastic/elasticsearch` with multi-client support and optional health indicator. Exposes the full client API via DI tokens.
+NestJS Elasticsearch module built on `@elastic/elasticsearch` with:
+- Multi-client DI (`default`, named clients)
+- Decorators for document mapping (`@Document`, `@Field`)
+- Optional auto index creation from decorators
+- TypeORM-like repository pattern (`EsRepository`) and DI (`forFeature`, `@InjectEsRepository`)
+- Optional health indicator utilities
 
 ## Install
 
@@ -10,9 +15,9 @@ npm i @ecom-co/elasticsearch @elastic/elasticsearch
 
 Peer deps: `@nestjs/common`, `@nestjs/core`.
 
-## Usage
+## Quick start
 
-### Decorators (document mapping)
+1) Define a document
 
 ```ts
 import { Document, Field } from '@ecom-co/elasticsearch';
@@ -25,56 +30,17 @@ export class Product {
 }
 ```
 
-Create index and mappings from metadata:
+2) Register clients (sync or async)
 
 ```ts
-import {
-  InjectElasticsearch,
-  ElasticsearchClient,
-  buildDocumentMetadata,
-  getDocumentMetadata,
-  toElasticsearchDocument,
-} from '@ecom-co/elasticsearch';
-
-export class ProductService {
-  constructor(@InjectElasticsearch() private readonly es: ElasticsearchClient) {}
-
-  async ensureIndex() {
-    const meta = buildDocumentMetadata(Product);
-    if (!meta) return;
-    await this.es.indices.create(
-      { index: meta.index, settings: meta.settings, mappings: meta.mappings },
-      { ignore: [400] },
-    );
-  }
-
-  async indexOne(p: Product) {
-    const { index } = getDocumentMetadata(Product)!;
-    await this.es.index({ index, id: p.id, document: toElasticsearchDocument(p) });
-    await this.es.indices.refresh({ index });
-  }
-
-  async search(q: string) {
-    const { index } = getDocumentMetadata(Product)!;
-    return this.es.search({ index, query: { multi_match: { query: q, fields: ['name^2', 'id'] } } });
-  }
-}
-```
-
-### Register (sync)
-
-```ts
+// app.module.ts
 import { Module } from '@nestjs/common';
 import { ElasticsearchModule } from '@ecom-co/elasticsearch';
 
 @Module({
   imports: [
     ElasticsearchModule.forRoot({
-      clients: [
-        { name: 'default', node: 'http://localhost:9200' },
-        { name: 'analytics', node: 'http://localhost:9201' },
-      ],
-      // Optional: auto-create indices from provided documents on startup
+      clients: [{ name: 'default', node: 'http://localhost:9200' }],
       autoCreateIndices: true,
       documents: [Product],
     }),
@@ -83,27 +49,67 @@ import { ElasticsearchModule } from '@ecom-co/elasticsearch';
 export class AppModule {}
 ```
 
-or async:
+3) Feature module repositories (TypeORM-like)
 
 ```ts
-ElasticsearchModule.forRootAsync({
-  imports: [ConfigModule],
-  inject: [ConfigService],
-  useFactory: (config: ConfigService) => ({
-    clients: [
-      { name: 'default', node: config.get('ES_NODE') },
-      { name: 'secure', node: config.get('ES_SECURE_NODE'), auth: { apiKey: config.get('ES_API_KEY') } },
-    ],
-    // Optional: auto-create indices from provided documents on startup
-    autoCreateIndices: true,
-    documents: [Product],
-  }),
-  // Optional in async mode: predeclare names to enable direct DI by name
-  predeclare: ['secure'],
-});
+// products.module.ts
+import { Module } from '@nestjs/common';
+import { ElasticsearchModule } from '@ecom-co/elasticsearch';
+import { ProductsService } from './products.service';
+import { Product } from './product.doc';
+
+@Module({
+  imports: [ElasticsearchModule.forFeature([Product])],
+  providers: [ProductsService],
+})
+export class ProductsModule {}
 ```
 
-### Inject client
+4) Inject repository
+
+```ts
+// products.service.ts
+import { Injectable } from '@nestjs/common';
+import { InjectEsRepository, EsRepository } from '@ecom-co/elasticsearch';
+import { Product } from './product.doc';
+
+@Injectable()
+export class ProductsService {
+  constructor(
+    @InjectEsRepository(Product)
+    private readonly repo: EsRepository<Product>,
+  ) {}
+
+  async search(q: string) {
+    return this.repo.search({
+      query: { multi_match: { query: q, fields: ['name^2', 'id'] } },
+      size: 20,
+    });
+  }
+}
+```
+
+Optional: use a named client for this feature
+
+```ts
+// products.module.ts
+@Module({
+  imports: [ElasticsearchModule.forFeature([Product], 'analytics')],
+  providers: [ProductsService],
+})
+export class ProductsModule {}
+
+// products.service.ts
+@Injectable()
+export class ProductsService {
+  constructor(
+    @InjectEsRepository(Product, 'analytics')
+    private readonly repo: EsRepository<Product>,
+  ) {}
+}
+```
+
+## Inject client directly (optional)
 
 ```ts
 import { Injectable } from '@nestjs/common';
@@ -112,187 +118,24 @@ import { InjectElasticsearch, ElasticsearchClient } from '@ecom-co/elasticsearch
 @Injectable()
 export class SearchService {
   constructor(@InjectElasticsearch() private readonly es: ElasticsearchClient) {}
-
-  async searchUsers(q: string) {
-    return this.es.search({ index: 'users', query: { query_string: { query: q } } });
-  }
 }
-```
 
-Inject a named client (sync or async with predeclared name):
-
-```ts
+// Named client
 @Injectable()
 export class AnalyticsSearch {
   constructor(@InjectElasticsearch('analytics') private readonly es: ElasticsearchClient) {}
 }
 ```
 
-### Health (optional)
+## Health (optional)
 
 ```ts
 import { checkElasticsearchHealthy } from '@ecom-co/elasticsearch';
-const res = await checkElasticsearchHealthy(esClient);
+await checkElasticsearchHealthy(esClient);
 ```
 
 ## Notes
-- Dependencies are peers; install them in the app.
-- Exposes root-only API. Avoid deep imports.
-- Tokens are uppercase: `ES_CLIENT` (default) and `ES_CLIENT_<NAME>` for named clients.
-- Names in DI are case-insensitive; internally normalized.
-
-### Optional: Repository pattern (TypeORM-like)
-
-Provides a lightweight base repository leveraging decorators.
-
-```ts
-// If not exported at root in your version, import from the file path
-import { EsRepository, InjectElasticsearch, ElasticsearchClient } from '@ecom-co/elasticsearch';
-
-export class ProductRepository extends EsRepository<Product> {
-  constructor(@InjectElasticsearch() es: ElasticsearchClient) {
-    super(es, Product);
-  }
-}
-
-// Usage
-await repo.ensureIndex();
-await repo.indexOne({ id: 'p1', name: 'iPhone', price: 999 });
-const res = await repo.search({ query: { match: { name: 'iphone' } }, size: 20 });
-```
-
-#### Extra helpers available in the base repository
-
-- Index management:
-  - `indexExists()`
-  - `ensureIndex()`
-  - `deleteIndex()`
-  - `refresh()`
-
-- Single doc:
-  - `indexOne(entity, id?)`
-  - `findById(id)` / `findSourceById(id)`
-  - `exists(id)`
-  - `deleteById(id)`
-  - `updateById(id, partial)`
-  - `upsertById(id, partial)`
-  - Scripted update: `updateByIdScript(id, { source, params?, lang? })`
-  - Update and return latest `_source`:
-    - `updateByIdAndGetSource(id, partial, { refresh? })`
-    - `upsertByIdAndGetSource(id, partial, { refresh? })`
-    - `updateByIdScriptAndGetSource(id, { source, params?, lang? }, { refresh? })`
-
-- Bulk:
-  - `bulkIndex(entities)`
-  - `bulkDeleteByIds(ids)`
-  - `bulkUpdateByIds([{ id, doc }])`
-  - `mgetSources(ids)` → `(T | undefined)[]`
-
-- Query-based:
-  - `count(query?)`
-  - `deleteByQuery(query)`
-  - `updateByQueryRaw(params)`
-  - Scripted: `updateByQueryScript({ script, query, ...rest })`
-
-- Search helpers:
-  - `search(params)` → typed `SearchResponse<T>`
-  - `searchRaw(params)`
-  - `searchSources(params)` → `T[]`
-  - `searchIds(params)` → `string[]`
-  - `searchFirstSource(params)` → `T | undefined`
-
-Example scripted updates and read-after-update:
-
-```ts
-// Scripted update for a single document
-await repo.updateByIdScript('p1', {
-  source: 'ctx._source.stock = (ctx._source.stock ?: 0) + params.delta',
-  params: { delta: 5 },
-});
-
-// Update and immediately read latest _source
-const updated = await repo.updateByIdAndGetSource('p1', { price: 899 }, { refresh: 'wait_for' });
-
-// Upsert and read latest _source
-const upserted = await repo.upsertByIdAndGetSource('p2', { id: 'p2', name: 'iPad', price: 499 });
-
-// Scripted update by query
-await repo.updateByQueryScript({
-  query: { term: { status: 'active' } },
-  script: { source: 'ctx._source.rank = params.r', params: { r: 10 } },
-  refresh: true,
-});
-```
-
-### Examples: Insert documents (single, bulk, nested)
-
-Using raw client:
-
-```ts
-import { InjectElasticsearch, ElasticsearchClient } from '@ecom-co/elasticsearch';
-
-class ProductDoc {
-  id!: string;
-  name!: string;
-  price!: number;
-  tags?: Array<{ id: string; name: string }>;
-}
-
-export class ProductWriter {
-  private readonly index = 'products';
-  constructor(@InjectElasticsearch() private readonly es: ElasticsearchClient) {}
-
-  async insertOne(doc: ProductDoc) {
-    await this.es.index({ index: this.index, id: doc.id, document: doc });
-    await this.es.indices.refresh({ index: this.index });
-  }
-
-  async bulkInsert(docs: ProductDoc[]) {
-    if (!docs.length) return;
-    const operations: Array<Record<string, unknown>> = [];
-    for (const d of docs) {
-      operations.push({ index: { _index: this.index, _id: d.id } });
-      operations.push(d);
-    }
-    await this.es.bulk({ operations });
-    await this.es.indices.refresh({ index: this.index });
-  }
-}
-```
-
-Using repository:
-
-```ts
-import { EsRepository, InjectElasticsearch, ElasticsearchClient } from '@ecom-co/elasticsearch';
-
-@Document({ index: 'products' })
-class Product {
-  @Field({ type: 'keyword' }) id!: string;
-  @Field({ type: 'text', analyzer: 'standard' }) name!: string;
-  @Field({ type: 'double' }) price!: number;
-  @Field({
-    type: 'nested',
-    properties: {
-      id: { type: 'keyword' },
-      name: { type: 'text', fields: { keyword: { type: 'keyword' } } },
-    },
-  })
-  tags?: Array<{ id: string; name: string }>;
-}
-
-class ProductRepository extends EsRepository<Product> {
-  constructor(@InjectElasticsearch() es: ElasticsearchClient) {
-    super(es, Product);
-  }
-}
-
-// Usage
-await repo.ensureIndex();
-await repo.indexOne({ id: 'p1', name: 'iPhone 15', price: 999, tags: [{ id: 'apple', name: 'Apple' }] });
-await repo.bulkIndex([
-  { id: 'p2', name: 'iPad', price: 499 },
-  { id: 'p3', name: 'Apple Watch', price: 399 },
-]);
-```
-
+- Register clients in the root module before using `forFeature`.
+- DI tokens: `ES_CLIENT` (default) and `ES_CLIENT_<NAME>` for named clients.
+- Repository token format: `<client>_EntityRepository` (default client omits prefix).
 
