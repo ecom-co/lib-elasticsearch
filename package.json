@@ -1,6 +1,6 @@
 {
   "name": "@ecom-co/elasticsearch",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "NestJS Elasticsearch module built on @elastic/elasticsearch with multi-client support and optional health indicator",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
