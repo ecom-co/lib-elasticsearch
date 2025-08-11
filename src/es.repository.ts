@@ -24,6 +24,13 @@ export class EsRepository<T extends object> {
     ) {}
 
     /**
+     * Access the underlying Elasticsearch client for advanced/raw operations.
+     */
+    getClient(): ElasticsearchClient {
+        return this.es;
+    }
+
+    /**
      * Target index name derived from the entity `@Document` metadata.
      */
     protected get index(): string {
@@ -231,12 +238,7 @@ export class EsRepository<T extends object> {
     }
 
     /** Search and return the full typed response. */
-    async search(params: {
-        query?: unknown;
-        from?: number;
-        size?: number;
-        sort?: unknown;
-    }): Promise<SearchResponse<T>> {
+    async search(params: Omit<Parameters<ElasticsearchClient['search']>[0], 'index'>): Promise<SearchResponse<T>> {
         const request = { index: this.index, ...params } as Omit<
             Parameters<ElasticsearchClient['search']>[0],
             'index'
@@ -245,21 +247,23 @@ export class EsRepository<T extends object> {
     }
 
     /** Search and return the `_source` array. */
-    async searchSources(params: { query?: unknown; from?: number; size?: number; sort?: unknown }): Promise<T[]> {
+    async searchSources(params: Omit<Parameters<ElasticsearchClient['search']>[0], 'index'>): Promise<T[]> {
         const res = await this.search(params);
         const hits = res.hits?.hits ?? [];
         return hits.map((h) => h._source).filter((s): s is T => s != null);
     }
 
     /** Search and return only document ids. */
-    async searchIds(params: { query?: unknown; from?: number; size?: number; sort?: unknown }): Promise<string[]> {
+    async searchIds(params: Omit<Parameters<ElasticsearchClient['search']>[0], 'index'>): Promise<string[]> {
         const res = await this.search(params);
         const hits = res.hits?.hits ?? [];
         return hits.map((h) => String(h._id)).filter((id) => !!id);
     }
 
     /** Search and return the first hit `_source`, if any. */
-    async searchFirstSource(params: { query?: unknown; sort?: unknown }): Promise<T | undefined> {
+    async searchFirstSource(
+        params: Omit<Parameters<ElasticsearchClient['search']>[0], 'index'>,
+    ): Promise<T | undefined> {
         const res = await this.search({ ...params, size: 1 });
         const hit = res.hits?.hits?.[0];
         return hit?._source ?? undefined;

@@ -86,6 +86,12 @@ export class ProductsService {
       size: 20,
     });
   }
+
+  // Access raw client when you need full power of the official API
+  async raw() {
+    const es = this.repo.getClient();
+    return es.cat.indices({ format: 'json' });
+  }
 }
 ```
 
