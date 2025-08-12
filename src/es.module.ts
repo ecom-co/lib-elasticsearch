@@ -1,5 +1,11 @@
 import { DynamicModule, Global, Module, OnModuleInit, Provider } from '@nestjs/common';
 
+import defaultTo from 'lodash/defaultTo';
+import get from 'lodash/get';
+import isEmpty from 'lodash/isEmpty';
+import map from 'lodash/map';
+import toArray from 'lodash/toArray';
+
 import { ES_DEFAULT_CLIENT_NAME, ES_MODULE_OPTIONS, getElasticsearchClientToken } from './es.constants';
 import type { ElasticsearchClient, ElasticsearchModuleAsyncOptions, ElasticsearchModuleOptions } from './es.interfaces';
 import { createElasticsearchProviders } from './es.providers';
@@ -7,8 +13,8 @@ import { ElasticsearchService } from './es.service';
 import { buildDocumentMetadata, normalizeName } from './es.utils';
 
 const createClientProviders = (options: ElasticsearchModuleOptions): Provider[] =>
-    options.clients.map((clientOptions) => {
-        const name = normalizeName(clientOptions.name);
+    map(get(options, 'clients', []), (clientOptions) => {
+        const name = normalizeName(get(clientOptions, 'name'));
         const token = getElasticsearchClientToken(name);
         return {
             provide: token,
@@ -24,17 +30,17 @@ class EsIndexInitializer implements OnModuleInit {
     ) {}
 
     async onModuleInit(): Promise<void> {
-        if (!this.options.autoCreateIndices) return;
-        const documents = this.options.documents ?? [];
-        if (documents.length === 0) return;
+        if (!get(this.options, 'autoCreateIndices')) return;
+        const documents = defaultTo(get(this.options, 'documents'), []);
+        if (isEmpty(documents)) return;
         const client = this.service.get();
         const creations: Array<Promise<unknown>> = [];
-        for (const doc of documents) {
+        for (const doc of toArray(documents)) {
             const meta = buildDocumentMetadata(doc);
             if (!meta) continue;
             creations.push(
                 client.indices.create(
-                    { index: meta.index, settings: meta.settings, mappings: meta.mappings },
+                    { index: get(meta, 'index'), settings: get(meta, 'settings'), mappings: get(meta, 'mappings') },
                     { ignore: [400] },
                 ),
             );
@@ -86,7 +92,7 @@ export class ElasticsearchModule {
             exports: [
                 ElasticsearchService,
                 getElasticsearchClientToken(ES_DEFAULT_CLIENT_NAME),
-                ...options.clients.map((c) => getElasticsearchClientToken(normalizeName(c.name))),
+                ...map(get(options, 'clients', []), (c) => getElasticsearchClientToken(normalizeName(get(c, 'name')))),
             ],
         };
     }
@@ -94,8 +100,8 @@ export class ElasticsearchModule {
     static forRootAsync(options: ElasticsearchModuleAsyncOptions): DynamicModule {
         const asyncOptionsProvider: Provider = {
             provide: ES_MODULE_OPTIONS,
-            useFactory: options.useFactory,
-            inject: options.inject || [],
+            useFactory: get(options, 'useFactory'),
+            inject: get(options, 'inject', []),
         };
         const serviceProvider: Provider = {
             provide: ElasticsearchService,
@@ -113,7 +119,7 @@ export class ElasticsearchModule {
             inject: [ElasticsearchService, ES_MODULE_OPTIONS],
         };
 
-        const predeclaredProviders: Provider[] = (options.predeclare ?? []).map((rawName): Provider => {
+        const predeclaredProviders: Provider[] = map(defaultTo(get(options, 'predeclare'), []), (rawName): Provider => {
             const name = normalizeName(rawName);
             return {
                 provide: getElasticsearchClientToken(name),
@@ -133,10 +139,10 @@ export class ElasticsearchModule {
 
         return {
             module: ElasticsearchModule,
-            imports: options.imports || [],
+            imports: get(options, 'imports', []),
             providers: [asyncOptionsProvider, serviceProvider, indexInitializerProvider, ...proxyProviders],
             exports: (() => {
-                const predeclaredTokens = (options.predeclare ?? []).map((n) =>
+                const predeclaredTokens = map(defaultTo(get(options, 'predeclare'), []), (n) =>
                     getElasticsearchClientToken(normalizeName(n)),
                 );
                 return [

@@ -1,6 +1,17 @@
 import { Injectable } from '@nestjs/common';
 
-import { isNil, map, filter, assign, isEmpty, isBoolean, toString, upperCase, trim, first, forEach, get } from 'lodash';
+import assign from 'lodash/assign';
+import filter from 'lodash/filter';
+import first from 'lodash/first';
+import forEach from 'lodash/forEach';
+import get from 'lodash/get';
+import isBoolean from 'lodash/isBoolean';
+import isEmpty from 'lodash/isEmpty';
+import isNil from 'lodash/isNil';
+import map from 'lodash/map';
+import toString from 'lodash/toString';
+import toUpper from 'lodash/toUpper';
+import trim from 'lodash/trim';
 
 import type { QueryDslQueryContainer, SearchResponse } from '@elastic/elasticsearch/lib/api/types';
 
@@ -387,8 +398,8 @@ export class EsRepository<T extends object> {
  * @param clientName Optional client name (defaults to `default`)
  */
 export const getRepositoryToken = (entity: { name: string }, clientName?: string): string => {
-    const base = upperCase(`ES_REPOSITORY_${get(entity, 'name')}`);
-    const name = upperCase(trim(clientName || 'default'));
+    const base = toUpper(`ES_REPOSITORY_${get(entity, 'name')}`);
+    const name = toUpper(trim(clientName || 'default'));
     const clientToken = getElasticsearchClientToken(name);
     return `${base}_${clientToken}`;
 };
