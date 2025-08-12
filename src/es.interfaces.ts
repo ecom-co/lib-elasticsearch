@@ -1,4 +1,4 @@
-import type { ModuleMetadata } from '@nestjs/common';
+import type { LoggerService, ModuleMetadata } from '@nestjs/common';
 
 import type { Client, ClientOptions } from '@elastic/elasticsearch';
 
@@ -12,6 +12,8 @@ export interface ElasticsearchModuleOptions {
     documents?: Array<abstract new (...args: any[]) => object>;
     /** When true, auto-create indices for provided documents on module init (idempotent) */
     autoCreateIndices?: boolean;
+    /** Optional Nest logger to receive client lifecycle/response messages */
+    logger?: LoggerService;
 }
 
 export interface ElasticsearchModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'> {

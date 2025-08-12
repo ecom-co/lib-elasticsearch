@@ -46,6 +46,8 @@ import { ElasticsearchModule } from '@ecom-co/elasticsearch';
       ],
       autoCreateIndices: true,
       documents: [Product],
+      // Optional: pass a Nest logger to observe request/response/errors
+      logger: new Logger('Elasticsearch'),
     }),
   ],
 })
