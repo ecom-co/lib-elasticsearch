@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Provider } from '@nestjs/common';
 
 import { type Constructor, EsRepository, getRepositoryToken } from './es.repository';
@@ -6,7 +7,7 @@ import { ElasticsearchService } from './es.service';
 import type { ElasticsearchClient } from './es.interfaces';
 
 export const createElasticsearchProviders = (
-    entities: Array<abstract new (...args: unknown[]) => object> = [],
+    entities: Array<abstract new (...args: any[]) => object> = [],
     clientName?: string,
 ): Provider[] =>
     entities.map((entity) => ({

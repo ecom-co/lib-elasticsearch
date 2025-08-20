@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { InjectionToken, LoggerService, ModuleMetadata, OptionalFactoryDependency } from '@nestjs/common';
 
 import type { Client, ClientOptions } from '@elastic/elasticsearch';
@@ -6,9 +7,10 @@ export type ElasticsearchClient = Client;
 
 export type ElasticsearchClientOptions = ClientOptions & { name?: string };
 
-export interface ElasticsearchModuleAsyncOptions extends Pick<ModuleMetadata, 'imports'> {
+export interface ElasticsearchModuleAsyncOptions<TArgs extends readonly any[] = readonly any[]>
+    extends Pick<ModuleMetadata, 'imports'> {
     inject?: Array<InjectionToken | OptionalFactoryDependency>;
-    useFactory: (...args: unknown[]) => ElasticsearchModuleOptions | Promise<ElasticsearchModuleOptions>;
+    useFactory: (...args: TArgs) => ElasticsearchModuleOptions | Promise<ElasticsearchModuleOptions>;
     /**
      * Optional list of client names to predeclare DI tokens in async mode.
      * Names are case-insensitive.
@@ -19,7 +21,7 @@ export interface ElasticsearchModuleAsyncOptions extends Pick<ModuleMetadata, 'i
 export interface ElasticsearchModuleOptions {
     clients: ElasticsearchClientOptions[];
     /** Optional list of entity classes (decorated with @Document) for auto index creation */
-    documents?: Array<abstract new (...args: unknown[]) => object>;
+    documents?: Array<abstract new (...args: any[]) => object>;
     /** When true, auto-create indices for provided documents on module init (idempotent) */
     autoCreateIndices?: boolean;
     /** Optional Nest logger to receive client lifecycle/response messages */

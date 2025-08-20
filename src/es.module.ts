@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { DynamicModule, Global, Module, OnModuleInit, Provider } from '@nestjs/common';
 
 import defaultTo from 'lodash/defaultTo';
@@ -62,7 +63,7 @@ class EsIndexInitializer implements OnModuleInit {
 @Module({})
 export class ElasticsearchModule {
     static forFeature(
-        entities: Array<abstract new (...args: unknown[]) => object> = [],
+        entities: Array<abstract new (...args: any[]) => object> = [],
         clientName?: string,
     ): DynamicModule {
         const providers = createElasticsearchProviders(entities, clientName);
