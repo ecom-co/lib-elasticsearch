@@ -13,13 +13,14 @@ import toString from 'lodash/toString';
 import toUpper from 'lodash/toUpper';
 import trim from 'lodash/trim';
 
-import type { QueryDslQueryContainer, SearchResponse } from '@elastic/elasticsearch/lib/api/types';
-
 import { getElasticsearchClientToken } from './es.constants';
-import type { ElasticsearchClient } from './es.interfaces';
 import { buildDocumentMetadata, getDocumentMetadata, toElasticsearchDocument } from './es.utils';
 
-export type Constructor<T = any, Arguments extends unknown[] = any[]> = new (...arguments_: Arguments) => T;
+import type { ElasticsearchClient } from './es.interfaces';
+import type { QueryDslQueryContainer, SearchResponse } from '@elastic/elasticsearch/lib/api/types';
+
+export type Constructor<T = unknown, Arguments extends unknown[] = unknown[]> = new (...arguments_: Arguments) => T;
+
 /**
  * Base Elasticsearch repository providing CRUD, bulk, query, and search helpers
  * for an entity `T` described via `@Document`/`@Field` decorators.
@@ -49,7 +50,9 @@ export class EsRepository<T extends object> {
     protected createEntity(source: Partial<T>): T {
         const proto = this.entityCtor.prototype as unknown as object;
         const instance = Object.create(proto) as T;
+
         assign(instance, source);
+
         return instance;
     }
 
@@ -58,13 +61,16 @@ export class EsRepository<T extends object> {
      */
     protected get index(): string {
         const meta = getDocumentMetadata(this.entityCtor);
+
         if (!meta) throw new Error('Missing @Document metadata for repository entity');
+
         return get(meta, 'index');
     }
 
     /** Check if the target index exists. */
     async indexExists(): Promise<boolean> {
         const res = await this.es.indices.exists({ index: this.index });
+
         return isBoolean(res) ? res : false;
     }
 
@@ -79,12 +85,14 @@ export class EsRepository<T extends object> {
      */
     async ensureIndex(): Promise<void> {
         const meta = buildDocumentMetadata(this.entityCtor);
+
         if (!meta) return;
+
         await this.es.indices.create(
             {
                 index: get(meta, 'index'),
-                settings: get(meta, 'settings'),
                 mappings: get(meta, 'mappings'),
+                settings: get(meta, 'settings'),
             },
             { ignore: [400] },
         );
@@ -101,13 +109,15 @@ export class EsRepository<T extends object> {
      * @param id Optional document id
      */
     async indexOne(entity: T, id?: string): Promise<void> {
-        await this.es.index({ index: this.index, id, document: toElasticsearchDocument(entity) });
+        await this.es.index({ id, document: toElasticsearchDocument(entity), index: this.index });
     }
 
     /** Bulk index entities using index action. */
     async bulkIndex(entities: ReadonlyArray<T>): Promise<void> {
         if (isEmpty(entities)) return;
+
         const operations: Array<Record<string, unknown>> = [];
+
         forEach(entities, (e) => {
             operations.push({ index: { _index: this.index } });
             operations.push(toElasticsearchDocument(e));
@@ -118,19 +128,23 @@ export class EsRepository<T extends object> {
     /** Bulk delete documents by ids. */
     async bulkDeleteByIds(ids: ReadonlyArray<string>): Promise<void> {
         if (isEmpty(ids)) return;
+
         const operations: Array<Record<string, unknown>> = [];
+
         forEach(ids, (id) => {
-            operations.push({ delete: { _index: this.index, _id: id } });
+            operations.push({ delete: { _id: id, _index: this.index } });
         });
         await this.es.bulk({ operations });
     }
 
     /** Bulk update documents by ids with partial docs. */
-    async bulkUpdateByIds(updates: ReadonlyArray<{ id: string; doc: Partial<T> }>): Promise<void> {
+    async bulkUpdateByIds(updates: ReadonlyArray<{ doc: Partial<T>; id: string }>): Promise<void> {
         if (isEmpty(updates)) return;
+
         const operations: Array<Record<string, unknown>> = [];
+
         forEach(updates, ({ id, doc }) => {
-            operations.push({ update: { _index: this.index, _id: id } });
+            operations.push({ update: { _id: id, _index: this.index } });
             operations.push({ doc: doc as Record<string, unknown> });
         });
         await this.es.bulk({ operations });
@@ -138,35 +152,36 @@ export class EsRepository<T extends object> {
 
     /** Delete a single document by id. */
     async deleteById(id: string): Promise<void> {
-        await this.es.delete({ index: this.index, id });
+        await this.es.delete({ id, index: this.index });
     }
 
     /** Partially update a single document by id. */
     async updateById(id: string, partial: Partial<T>): Promise<void> {
-        await this.es.update<T, Partial<T>>({ index: this.index, id, doc: partial });
+        await this.es.update<T, Partial<T>>({ id, doc: partial, index: this.index });
     }
 
     /** Upsert a single document by id with the given partial body. */
     async upsertById(id: string, partial: Partial<T>): Promise<void> {
-        await this.es.update<T, Partial<T>>({ index: this.index, id, doc: partial, doc_as_upsert: true });
+        await this.es.update<T, Partial<T>>({ id, doc: partial, doc_as_upsert: true, index: this.index });
     }
 
     /** Update a single document by id using an inline script. */
     async updateByIdScript(
         id: string,
-        script: { source: string; lang?: string; params?: Record<string, unknown> },
+        script: { lang?: string; params?: Record<string, unknown>; source: string },
     ): Promise<void> {
-        await this.es.update<T, unknown>({ index: this.index, id, script });
+        await this.es.update<T, unknown>({ id, index: this.index, script });
     }
 
     /** Update a document by id then return the latest `_source`. */
     async updateByIdAndGetSource(
         id: string,
         partial: Partial<T>,
-        options?: { refresh?: boolean | 'wait_for' },
+        options?: { refresh?: 'wait_for' | boolean },
     ): Promise<T | undefined> {
-        await this.es.update<T, Partial<T>>({ index: this.index, id, doc: partial, refresh: get(options, 'refresh') });
-        const res = await this.es.get<T>({ index: this.index, id });
+        await this.es.update<T, Partial<T>>({ id, doc: partial, index: this.index, refresh: get(options, 'refresh') });
+        const res = await this.es.get<T>({ id, index: this.index });
+
         return get(res, '_source');
     }
 
@@ -174,63 +189,72 @@ export class EsRepository<T extends object> {
     async upsertByIdAndGetSource(
         id: string,
         partial: Partial<T>,
-        options?: { refresh?: boolean | 'wait_for' },
+        options?: { refresh?: 'wait_for' | boolean },
     ): Promise<T | undefined> {
         await this.es.update<T, Partial<T>>({
-            index: this.index,
             id,
             doc: partial,
             doc_as_upsert: true,
+            index: this.index,
             refresh: get(options, 'refresh'),
         });
-        const res = await this.es.get<T>({ index: this.index, id });
+        const res = await this.es.get<T>({ id, index: this.index });
+
         return get(res, '_source');
     }
 
     /** Update a document by id with a script then return the latest `_source`. */
     async updateByIdScriptAndGetSource(
         id: string,
-        script: { source: string; lang?: string; params?: Record<string, unknown> },
-        options?: { refresh?: boolean | 'wait_for' },
+        script: { lang?: string; params?: Record<string, unknown>; source: string },
+        options?: { refresh?: 'wait_for' | boolean },
     ): Promise<T | undefined> {
-        await this.es.update<T, unknown>({ index: this.index, id, script, refresh: get(options, 'refresh') });
-        const res = await this.es.get<T>({ index: this.index, id });
+        await this.es.update<T, unknown>({ id, index: this.index, refresh: get(options, 'refresh'), script });
+        const res = await this.es.get<T>({ id, index: this.index });
+
         return get(res, '_source');
     }
 
     /** Check if a document exists by id. */
     async exists(id: string): Promise<boolean> {
-        const res = await this.es.exists({ index: this.index, id });
+        const res = await this.es.exists({ id, index: this.index });
+
         return isBoolean(res) ? res : false;
     }
 
     /** Get a document by id (raw response). */
     async findById(id: string): Promise<unknown> {
-        return this.es.get({ index: this.index, id });
+        return this.es.get({ id, index: this.index });
     }
 
     /** Get a document `_source` by id, or `undefined` if not found. */
     async findSourceById(id: string): Promise<T | undefined> {
         const found = await this.exists(id);
+
         if (!found) return undefined;
-        const res = await this.es.get<T>({ index: this.index, id });
+
+        const res = await this.es.get<T>({ id, index: this.index });
+
         return get(res, '_source');
     }
 
     /** Multi-get sources by ids (aligned with input order). */
     async mgetSources(ids: ReadonlyArray<string>): Promise<Array<T | undefined>> {
         if (isEmpty(ids)) return [];
-        type InlineGet<TDoc> = { found?: boolean; _source?: TDoc };
+
+        type InlineGet<TDoc> = { _source?: TDoc; found?: boolean };
         const res = await this.es.mget<T>({
-            docs: map(ids, (id) => ({ _index: this.index, _id: id })),
+            docs: map(ids, (id) => ({ _id: id, _index: this.index })),
         } as Omit<Parameters<ElasticsearchClient['mget']>[0], 'index'>);
         const docs = get(res, 'docs', []) as Array<InlineGet<T>>;
+
         return map(docs, (d) => (get(d, 'found') ? (get(d, '_source') as T) : undefined));
     }
 
     /** Count documents matching a query. */
     async count(query?: QueryDslQueryContainer): Promise<number> {
         const res = await this.es.count({ index: this.index, query });
+
         return get(res, 'count', 0);
     }
 
@@ -248,13 +272,14 @@ export class EsRepository<T extends object> {
 
     /** Update-by-query using an inline script. */
     async updateByQueryScript(
-        args: {
-            script: { source: string; lang?: string; params?: Record<string, unknown> };
+        args: Omit<Parameters<ElasticsearchClient['updateByQuery']>[0], 'index' | 'query' | 'script'> & {
             query: QueryDslQueryContainer;
-        } & Omit<Parameters<ElasticsearchClient['updateByQuery']>[0], 'index' | 'script' | 'query'>,
+            script: { lang?: string; params?: Record<string, unknown>; source: string };
+        },
     ): Promise<unknown> {
-        const { script, query, ...rest } = args;
-        return this.es.updateByQuery({ index: this.index, script, query, ...rest });
+        const { query, script, ...rest } = args;
+
+        return this.es.updateByQuery({ index: this.index, query, script, ...rest });
     }
 
     /** Low-level passthrough for search request params. */
@@ -266,26 +291,28 @@ export class EsRepository<T extends object> {
 
     /** Search and return the full typed response. */
     async search(params: {
-        query?: QueryDslQueryContainer;
-        q?: string;
         from?: number;
+        q?: string;
+        query?: QueryDslQueryContainer;
         size?: number;
         sort?: unknown;
     }): Promise<SearchResponse<T>> {
         const request = { index: this.index, ...params } as Parameters<ElasticsearchClient['search']>[0];
+
         return this.es.search<T>(request);
     }
 
     /** Search and return the `_source` array. */
     async searchSources(params: {
-        query?: QueryDslQueryContainer;
-        q?: string;
         from?: number;
+        q?: string;
+        query?: QueryDslQueryContainer;
         size?: number;
         sort?: unknown;
     }): Promise<T[]> {
         const res = await this.search(params);
         const hits = get(res, 'hits.hits', []);
+
         return filter(
             map(hits, (h) => get(h, '_source')),
             (s): s is T => !isNil(s),
@@ -294,26 +321,28 @@ export class EsRepository<T extends object> {
 
     /** Search and return hydrated entity instances. */
     async searchEntities(params: {
-        query?: QueryDslQueryContainer;
-        q?: string;
         from?: number;
+        q?: string;
+        query?: QueryDslQueryContainer;
         size?: number;
         sort?: unknown;
     }): Promise<T[]> {
         const sources = await this.searchSources(params);
+
         return map(sources, (s) => this.createEntity(s));
     }
 
     /** Search and return only document ids. */
     async searchIds(params: {
-        query?: QueryDslQueryContainer;
-        q?: string;
         from?: number;
+        q?: string;
+        query?: QueryDslQueryContainer;
         size?: number;
         sort?: unknown;
     }): Promise<string[]> {
         const res = await this.search(params);
         const hits = get(res, 'hits.hits', []);
+
         return filter(
             map(hits, (h) => toString(get(h, '_id'))),
             (id) => !!id,
@@ -322,72 +351,80 @@ export class EsRepository<T extends object> {
 
     /** Search and return the first hit `_source`, if any. */
     async searchFirstSource(params: {
-        query?: QueryDslQueryContainer;
-        q?: string;
         from?: number;
+        q?: string;
+        query?: QueryDslQueryContainer;
         size?: number;
         sort?: unknown;
     }): Promise<T | undefined> {
         const res = await this.search({ ...params, size: 1 });
         const hit = first(get(res, 'hits.hits', []));
+
         return get(hit, '_source');
     }
 
     /** Search and return sources along with ES metadata (index, id, score). */
     async searchSourcesWithMeta(params: {
-        query?: QueryDslQueryContainer;
-        q?: string;
         from?: number;
+        q?: string;
+        query?: QueryDslQueryContainer;
         size?: number;
         sort?: unknown;
-    }): Promise<Array<{ index: string; id: string; score: number | null; source: T }>> {
+    }): Promise<Array<{ id: string; index: string; score: null | number; source: T }>> {
         const res = await this.search(params);
         const hits = get(res, 'hits.hits', []);
         const mapped = map(hits, (h) => ({
-            index: toString(get(h, '_index')),
             id: toString(get(h, '_id')),
-            score: (get(h, '_score') as number | null) ?? null,
+            index: toString(get(h, '_index')),
+            score: (get(h, '_score') as null | number) ?? null,
             source: get(h, '_source') as T,
         }));
+
         return filter(mapped, (m) => !isNil(m.source));
     }
 
     /** Search and return first source with ES metadata (index, id, score), if any. */
     async searchFirstSourceWithMeta(params: {
-        query?: QueryDslQueryContainer;
-        q?: string;
         from?: number;
+        q?: string;
+        query?: QueryDslQueryContainer;
         size?: number;
         sort?: unknown;
-    }): Promise<{ index: string; id: string; score: number | null; source: T } | undefined> {
+    }): Promise<undefined | { id: string; index: string; score: null | number; source: T }> {
         const res = await this.search({ ...params, size: 1 });
         const hit = first(get(res, 'hits.hits', []));
+
         if (isNil(hit)) return undefined;
+
         const source = get(hit, '_source');
+
         if (isNil(source)) return undefined;
+
         return {
-            index: toString(get(hit, '_index')),
             id: toString(get(hit, '_id')),
-            score: (get(hit, '_score') as number | null) ?? null,
+            index: toString(get(hit, '_index')),
+            score: (get(hit, '_score') as null | number) ?? null,
             source,
         };
     }
 
     /** Search and return the first hydrated entity, if any. */
     async searchFirstEntity(params: {
-        query?: QueryDslQueryContainer;
-        q?: string;
         from?: number;
+        q?: string;
+        query?: QueryDslQueryContainer;
         size?: number;
         sort?: unknown;
     }): Promise<T | undefined> {
         const src = await this.searchFirstSource(params);
+
         return isNil(src) ? undefined : this.createEntity(src);
     }
 
     /** Get one document by id and hydrate into entity instance. */
     async findEntityById(id: string): Promise<T | undefined> {
         const src = await this.findSourceById(id);
+
         return isNil(src) ? undefined : this.createEntity(src);
     }
 }
@@ -401,5 +438,6 @@ export const getRepositoryToken = (entity: { name: string }, clientName?: string
     const base = toUpper(`ES_REPOSITORY_${get(entity, 'name')}`);
     const name = toUpper(trim(clientName || 'default'));
     const clientToken = getElasticsearchClientToken(name);
+
     return `${base}_${clientToken}`;
 };

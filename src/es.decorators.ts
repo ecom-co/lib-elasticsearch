@@ -2,13 +2,14 @@ import { Inject } from '@nestjs/common';
 import 'reflect-metadata';
 
 import {
-    getElasticsearchClientToken,
     ES_DOCUMENT_METADATA,
     ES_FIELD_METADATA,
     ES_INDEX_METADATA,
+    getElasticsearchClientToken,
 } from './es.constants';
-import type { DocumentOptions, FieldOptions, IndexOptions } from './es.interfaces';
 import { getRepositoryToken } from './es.repository';
+
+import type { DocumentOptions, FieldOptions, IndexOptions } from './es.interfaces';
 
 export type InjectElasticsearch = {
     (): ParameterDecorator;
@@ -51,6 +52,7 @@ export const Field =
         const existingFields =
             (Reflect.getMetadata(ES_FIELD_METADATA, ctor) as Map<string | symbol, FieldOptions> | undefined) ||
             new Map<string | symbol, FieldOptions>();
+
         existingFields.set(propertyKey, options);
         Reflect.defineMetadata(ES_FIELD_METADATA, existingFields, ctor);
     };

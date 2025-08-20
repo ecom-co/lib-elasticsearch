@@ -1,23 +1,24 @@
 import 'reflect-metadata';
 
+import { Client } from '@elastic/elasticsearch';
 import clone from 'lodash/clone';
 import cloneDeep from 'lodash/cloneDeep';
 import get from 'lodash/get';
 import isUndefined from 'lodash/isUndefined';
+import set from 'lodash/set';
 import toLower from 'lodash/toLower';
 import toString from 'lodash/toString';
 import trim from 'lodash/trim';
 
-import { Client } from '@elastic/elasticsearch';
-
 import { ES_DOCUMENT_METADATA, ES_FIELD_METADATA, ES_INDEX_METADATA } from './es.constants';
+
 import type {
+    DocumentMetadata,
+    DocumentOptions,
     ElasticsearchClient,
     ElasticsearchClientOptions,
-    DocumentOptions,
     FieldOptions,
     IndexOptions,
-    DocumentMetadata,
 } from './es.interfaces';
 
 export const createElasticsearchClient = (options: ElasticsearchClientOptions): ElasticsearchClient =>
@@ -46,10 +47,11 @@ export const getIndexMetadata = (target: object): IndexOptions | undefined =>
 /**
  * Build complete document metadata including mappings from field decorators
  */
-type DocumentMappings = { properties?: Record<string, FieldOptions> } & Record<string, unknown>;
+type DocumentMappings = Record<string, unknown> & { properties?: Record<string, FieldOptions> };
 
 export const buildDocumentMetadata = (target: object): DocumentMetadata | undefined => {
     const documentOptions = getDocumentMetadata(target);
+
     if (!documentOptions) {
         return undefined;
     }
@@ -60,21 +62,24 @@ export const buildDocumentMetadata = (target: object): DocumentMetadata | undefi
     // Build mappings from field decorators
     const baseMappings: Record<string, unknown> = documentOptions.mappings ? cloneDeep(documentOptions.mappings) : {};
     const mappings: DocumentMappings = baseMappings as DocumentMappings;
+
     if (fieldsMetadata) {
         const properties: Record<string, FieldOptions> = cloneDeep(mappings.properties) || {};
+
         fieldsMetadata.forEach((fieldOptions, fieldName) => {
             const key = toString(fieldName);
-            properties[key] = fieldOptions;
+
+            set(properties, key, fieldOptions);
         });
         mappings.properties = properties;
     }
 
     return {
-        index: documentOptions.index,
         type: documentOptions.type,
-        settings: get(indexMetadata, 'settings', documentOptions.settings),
-        mappings,
         fields: fieldsMetadata,
+        index: documentOptions.index,
+        mappings,
+        settings: get(indexMetadata, 'settings', documentOptions.settings),
     };
 };
 
@@ -92,11 +97,13 @@ export const toElasticsearchDocument = (instance: object): Record<string, unknow
     // Only include fields that are decorated with @Field
     const record = instance as unknown as Record<string, unknown>;
     const document: Record<string, unknown> = {};
+
     fieldsMetadata.forEach((fieldOptions, fieldName) => {
         const key = toString(fieldName);
         const value = get(record, key);
+
         if (!isUndefined(value)) {
-            document[key] = value;
+            set(document, key, value);
         }
     });
 
