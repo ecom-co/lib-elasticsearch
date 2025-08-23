@@ -4,6 +4,15 @@
 import type { Client } from '@elastic/elasticsearch';
 import type { HealthIndicatorResult } from '@nestjs/terminus';
 
+/**
+ * Check Elasticsearch cluster health and return health indicator result.
+ * @param {Client} client - Elasticsearch client instance
+ * @param {string} [key='elasticsearch'] - Health indicator key name
+ * @returns {Promise<HealthIndicatorResult>} Health indicator result with cluster status
+ * @example
+ * const health = await checkElasticsearchHealthy(client, 'es-cluster');
+ * console.log(health.elasticsearch.status); // 'up'
+ */
 export const checkElasticsearchHealthy = async (
     client: Client,
     key = 'elasticsearch',

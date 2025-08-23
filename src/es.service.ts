@@ -5,11 +5,18 @@ import { createElasticsearchClient } from './es.utils';
 
 import type { ElasticsearchClient, ElasticsearchModuleOptions } from './es.interfaces';
 
+/**
+ * Service for managing Elasticsearch clients with logging and lifecycle management.
+ */
 @Injectable()
 export class ElasticsearchService implements OnModuleDestroy {
     private logger: LoggerService = new Logger(ElasticsearchService.name);
     private readonly nameToClient = new Map<string, ElasticsearchClient>();
 
+    /**
+     * Clean up all Elasticsearch clients when module is destroyed.
+     * @returns {Promise<void>} Promise that resolves when all clients are closed
+     */
     async onModuleDestroy(): Promise<void> {
         const closers: Array<Promise<void>> = [];
 
@@ -25,6 +32,15 @@ export class ElasticsearchService implements OnModuleDestroy {
         this.nameToClient.clear();
     }
 
+    /**
+     * Get an Elasticsearch client by name.
+     * @param {string} [name=ES_DEFAULT_CLIENT_NAME] - Client name to retrieve
+     * @returns {ElasticsearchClient} The Elasticsearch client instance
+     * @throws {Error} If client with given name is not found
+     * @example
+     * const client = service.get(); // Default client
+     * const secondary = service.get('secondary'); // Named client
+     */
     get(name = ES_DEFAULT_CLIENT_NAME): ElasticsearchClient {
         const key = name.toLowerCase();
         const client = this.nameToClient.get(key);
@@ -34,6 +50,13 @@ export class ElasticsearchService implements OnModuleDestroy {
         return client;
     }
 
+    /**
+     * Configure the service with client options and logger.
+     * @param {ElasticsearchModuleOptions} options - Module configuration options
+     * @returns {void}
+     * @example
+     * service.configure({ clients: [{ node: 'http://localhost:9200' }] });
+     */
     configure(options: ElasticsearchModuleOptions): void {
         if (options.logger) this.logger = options.logger;
 
@@ -46,6 +69,12 @@ export class ElasticsearchService implements OnModuleDestroy {
         }
     }
 
+    /**
+     * Attach logging to an Elasticsearch client.
+     * @param {string} name - Client name for logging labels
+     * @param {ElasticsearchClient} client - Elasticsearch client instance
+     * @returns {void}
+     */
     private attachLogs(name: string, client: ElasticsearchClient): void {
         const label = `es:${name}`;
         // Low-level client exposes events via Transport. We can log request/response and errors.
