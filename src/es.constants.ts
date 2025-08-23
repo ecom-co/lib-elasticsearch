@@ -12,6 +12,14 @@ export const ES_FIELD_METADATA = Symbol('es:field');
 
 export const ES_INDEX_METADATA = Symbol('es:index');
 
+/**
+ * Generate a DI token for an Elasticsearch client with the given name.
+ * @param {string} [name] - The client name (defaults to 'default')
+ * @returns {string} The dependency injection token for the client
+ * @example
+ * getElasticsearchClientToken('default'); // 'ES_CLIENT'
+ * getElasticsearchClientToken('secondary'); // 'ES_CLIENT_SECONDARY'
+ */
 export const getElasticsearchClientToken = (name?: string): string => {
     const keyUpper = toUpper(trim(name) || ES_DEFAULT_CLIENT_NAME);
 

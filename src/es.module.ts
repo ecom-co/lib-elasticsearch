@@ -14,6 +14,13 @@ import { buildDocumentMetadata, normalizeName } from './es.utils';
 
 import type { ElasticsearchClient, ElasticsearchModuleAsyncOptions, ElasticsearchModuleOptions } from './es.interfaces';
 
+/**
+ * Create client providers for the given Elasticsearch module options.
+ * @param {ElasticsearchModuleOptions} options - Module configuration options
+ * @returns {Provider[]} Array of NestJS providers for Elasticsearch clients
+ * @example
+ * const providers = createClientProviders({ clients: [{ name: 'default', node: 'http://localhost:9200' }] });
+ */
 const createClientProviders = (options: ElasticsearchModuleOptions): Provider[] =>
     map(get(options, 'clients', []), (clientOptions) => {
         const name = normalizeName(get(clientOptions, 'name'));
@@ -26,12 +33,24 @@ const createClientProviders = (options: ElasticsearchModuleOptions): Provider[] 
         } satisfies Provider;
     });
 
+/**
+ * Index initializer that automatically creates indices for document entities.
+ */
 class EsIndexInitializer implements OnModuleInit {
+    /**
+     * Create an index initializer.
+     * @param {ElasticsearchService} service - Elasticsearch service instance
+     * @param {ElasticsearchModuleOptions} options - Module configuration options
+     */
     constructor(
         private readonly service: ElasticsearchService,
         private readonly options: ElasticsearchModuleOptions,
     ) {}
 
+    /**
+     * Initialize indices on module startup if autoCreateIndices is enabled.
+     * @returns {Promise<void>} Promise that resolves when initialization completes
+     */
     async onModuleInit(): Promise<void> {
         if (!get(this.options, 'autoCreateIndices')) return;
 
@@ -59,9 +78,20 @@ class EsIndexInitializer implements OnModuleInit {
     }
 }
 
+/**
+ * Global Elasticsearch module for NestJS applications.
+ */
 @Global()
 @Module({})
 export class ElasticsearchModule {
+    /**
+     * Register entity repositories for a specific feature module.
+     * @param {Array<abstract new (...args: any[]) => object>} [entities=[]] - Array of entity constructors
+     * @param {string} [clientName] - Optional client name to use for repositories
+     * @returns {DynamicModule} Dynamic module configuration
+     * @example
+     * ElasticsearchModule.forFeature([User, Product], 'secondary');
+     */
     static forFeature(
         entities: Array<abstract new (...args: any[]) => object> = [],
         clientName?: string,
@@ -75,6 +105,16 @@ export class ElasticsearchModule {
         };
     }
 
+    /**
+     * Register the Elasticsearch module with synchronous configuration.
+     * @param {ElasticsearchModuleOptions} options - Module configuration options
+     * @returns {DynamicModule} Dynamic module configuration
+     * @example
+     * ElasticsearchModule.forRoot({
+     *   clients: [{ node: 'http://localhost:9200' }],
+     *   autoCreateIndices: true
+     * });
+     */
     static forRoot(options: ElasticsearchModuleOptions): DynamicModule {
         const optionProvider: Provider = { provide: ES_MODULE_OPTIONS, useValue: options };
         const serviceProvider: Provider = {
@@ -112,6 +152,19 @@ export class ElasticsearchModule {
         };
     }
 
+    /**
+     * Register the Elasticsearch module with asynchronous configuration.
+     * @param {ElasticsearchModuleAsyncOptions} options - Async module configuration options
+     * @returns {DynamicModule} Dynamic module configuration
+     * @example
+     * ElasticsearchModule.forRootAsync({
+     *   imports: [ConfigModule],
+     *   inject: [ConfigService],
+     *   useFactory: (config: ConfigService) => ({
+     *     clients: [{ node: config.get('ELASTICSEARCH_URL') }]
+     *   })
+     * });
+     */
     static forRootAsync(options: ElasticsearchModuleAsyncOptions): DynamicModule {
         const asyncOptionsProvider: Provider = {
             inject: get(options, 'inject', []),
